@@ -66,6 +66,8 @@ df2sf <- function(dataframe, longitude="decimalLongitude", latitude="decimalLati
 packageSquid <- function(xlsx, csv_file, eml_file){
   tabs <- readSquid(xlsx) # returns a named list of dataframes
 
+
+
   # Generate EML
   print("Making EML")
   attributes <- tabs$schema %>%
@@ -97,6 +99,9 @@ packageSquid <- function(xlsx, csv_file, eml_file){
                    attributeList=attributeList)
 
   # coverage
+
+  # create flatten file
+  data_coords <- flattenSquid(tabs)
 
   # get the first and last timestamps to use as the time coverage range
   timestamp_range <- data_coords %>%
