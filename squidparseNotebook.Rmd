@@ -1,0 +1,180 @@
+---
+title: "squidparseWorking"
+author: "Andy Bell (bellan@si.edu)"
+date: "4/9/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(mapview) # for ploting maps
+library(EML)
+library(marinegeoParseR)
+excel_file <- system.file("extdata", "Squidpops_example_v0.0.1.xlsx", package="marinegeoParseR")
+```
+
+## Load the Squidpops excel file tabs into dataframes
+
+```{r}
+tabs <- readSquid(excel_file) # returns a named list of dataframes
+
+names(tabs) # the names of the tabs
+```
+
+## Flatten Excel workbook by joining the locations sheet with the data sheet
+
+```{r}
+data_coords <- flattenSquid(tabs)
+
+# save as csv
+write.csv(data_coords, "squidpop_example_flat.csv", row.names = FALSE)
+```
+
+## make a quick map
+
+```{r}
+# make a quickplot of the data points plus bounding box
+data_sf <- df2sf(data_coords)
+mapview(sf::st_make_grid(data_sf, n=1), alpha.regions=0.1)+mapview(data_sf)
+```
+
+
+
+## EML
+
+```{r}
+# see https://github.com/ropensci/EML/blob/master/vignettes/creating-EML.Rmd
+
+attributes <- tabs$schema %>%
+  dplyr::filter(Tab %in% c("Data", "Locations")) %>% 
+  dplyr::select(-c(Tab))
+
+# TODO - forces all number to be reals
+attributes <- attributes %>% 
+  mutate(numberType=ifelse(attributeType=="numeric", "real", NA)) %>%
+  mutate(definition=attributeDefinition)
+
+factors <- tabs$vocab %>% 
+  dplyr::rename("attributeName"="Field", "code"="Value", "definition"="Definition")
+```
+
+
+```{r}
+
+# attribute types
+attribute_classes <- attributes$attributeType
+
+# attribute list 
+attributeList <- EML::set_attributes(attributes, as.data.frame(factors), col_classes = attribute_classes)
+
+attributeList
+
+```
+## Data file format
+
+```{r}
+physical <- set_physical("squidpop_example_flat.csv")
+
+dataTable <- new("dataTable", 
+                 entityName="squidpop_example_flat.csv", 
+                 entityDescription="data with lat/longs",
+                 physical=physical, 
+                 attributeList=attributeList)
+```
+          
+## Set coverage metadata
+```{r}
+# get the first and last timestamps to use as the time coverage range
+timestamp_range <- data_coords %>% summarise(min_timestamp = min(deploymentTimestamp), max_timestamp = max(checkTimestamp))
+first_date <- lubridate::date(timestamp_range$min_timestamp[1])
+last_date <- lubridate::date(timestamp_range$max_timestamp[1])
+
+#bounding box calculated above
+bbox <- sf::st_bbox(df2sf(data_coords))
+
+coverage <- set_coverage(begin = toString(first_date), end = toString(last_date), geographicDescription = "test description", west=bbox["xmax"], east=bbox["xmin"], north=bbox["ymax"], south=bbox["ymin"])
+
+coverage
+```
+
+
+## people
+```{r}
+
+
+creator <- as(as.person(paste(tabs$metadata$Creator, " <", tabs$metadata$CreatorContact, "> ", "[cre]", sep="")), "creator")
+creator
+
+
+more_people <- tabs$metadata$AdditionalPeople %>% stringr::str_split(pattern="\\|", simplify = TRUE) %>% stringr::str_trim(side = "both")
+
+p <- as.person(more_people)
+p
+
+# change roles to authors
+for(i in 1:length(p)){
+  p[i]$role <- "aut"
+}
+
+
+associatedParty <- as(p, "associatedParty")
+associatedParty
+
+
+# publisher
+publisher <- new("publisher", organizationName="Smithsonian Marine Global Earth Observatory")
+publisher
+
+# contact
+data_contact <- as.person("Andy Bell <bellan@si.edu> [com]")
+c <-as(data_contact, "creator")
+contact <- new("contact", individualName=c@individualName, electronicMail=c@electronicMailAddress, organization="Smithsonian Marine Global Eath Observatory")
+
+contact
+```
+
+
+```{r}
+
+keywordSet <- c(new("keywordSet", keywordThesaurus="MarineGEO squidpops", keyword=c("bait", "squidpop", "fish")))
+pubDate <- lubridate::now() %>% lubridate::date()
+title <- tabs$metadata$Title
+abstract <- tabs$metadata$Abstract
+
+```
+
+
+```{r}
+dataset <- new("dataset",
+               title=title,
+               creator=creator,
+               pubDate=toString(pubDate),
+               abstract=abstract,
+               associatedParty=associatedParty,
+               keywordSet=keywordSet,
+               coverage=coverage,
+               contact=contact,
+               dataTable=dataTable)
+```
+
+
+```{r}
+eml <- new("eml",
+           packageId = "bcfb56f1-2de6-4f2e-b09b-11e833e27187",
+           system='uuid',
+           dataset=dataset)
+
+write_eml(eml, "eml.xml")
+```
+
+```{r}
+eml_validate("eml.xml")
+```
+
+
+
+```{r}
+eml
+```
+

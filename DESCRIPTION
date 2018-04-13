@@ -1,0 +1,16 @@
+Package: marinegeoParseR
+Type: Package
+Title: parses MarineGEO data entry excel templates
+Version: 0.1.0
+Author@R: person("Andy Bell", email="bellan@si.edu", role=c("cre", "aut"))
+Description: Unpacks and transforms data in the MarineGEO data entry templates.
+License: 
+Encoding: UTF-8
+LazyData: true
+Imports:
+  tidyverse,
+  lubridate,
+  magrittr,
+  sf
+RoxygenNote: 6.0.1
+Suggests: testthat
